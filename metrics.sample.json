@@ -1,0 +1,64 @@
+{
+  "metrics": [
+    {
+      "name": "nginx_request_duration_milliseconds",
+      "help": "The HTTP Request latencies in milliseconds.",
+      "type": "histogram",
+      "buckets": [ 10, 50, 100, 250, 500, 750, 1000, 5000, 10000 ],
+      "value": "upstream_response_time_total",
+      "labels": {
+        "server": "@hostname",
+        "service": "@logger",
+        "code": "status"
+      },
+      "const_labels": {
+        "test": "123"
+      }
+    },
+    {
+      "name": "nginx_request_size_bytes",
+      "help": "The HTTP request sizes in bytes.",
+      "type": "histogram",
+      "value": "upstream_response_time_total",
+      "buckets": [ 100, 1000, 10000, 100000, 1000000, 10000000 ],
+      "labels": {
+        "server": "@hostname",
+        "service": "@logger",
+        "code": "status"
+      },
+      "const_labels": {
+        "test": "123"
+      }
+    },
+    {
+      "name": "nginx_request_time_last",
+      "help": "Timestamp of last message",
+      "type": "gauge",
+      "value": "time",
+      "labels": {
+        "server": "@hostname",
+        "service": "@logger"
+      }
+    },
+    {
+      "name": "nginx_request_total",
+      "help": "Timestamp of last message",
+      "type": "counter",
+      "labels": {
+        "server": "@hostname",
+        "service": "@logger"
+      }
+    },
+    {
+      "name": "example_counter_with_value",
+      "help": "Timestamp of last message",
+      "type": "counter",
+      "value": "time",
+      "labels": {
+        "server": "@hostname",
+        "service": "@logger"
+      }
+    }
+
+  ]
+}
