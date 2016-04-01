@@ -58,19 +58,21 @@ func (m *metric) Process(msg *message.Message) {
 		return
 	}
 	value := 0.0
-	v := getFieldValue(m.MetricConfig.Value, msg)
-	if v == nil {
-		log.Println("Couldn't find field", m.MetricConfig.Value)
-		return
-	}
-	switch v := v.(type) {
-	case float64:
-		value = v
-	case int:
-		value = float64(v)
-	default:
-		log.Printf("Invalid type %T for field %s", v, m.MetricConfig.Value)
-		return
+	if m.MetricConfig.Value != "" {
+		v := getFieldValue(m.MetricConfig.Value, msg)
+		if v == nil {
+			log.Println("Couldn't find field", m.MetricConfig.Value)
+			return
+		}
+		switch v := v.(type) {
+		case float64:
+			value = v
+		case int:
+			value = float64(v)
+		default:
+			log.Printf("Invalid type %T for field %s", v, m.MetricConfig.Value)
+			return
+		}
 	}
 
 	switch m.MetricConfig.Type {
