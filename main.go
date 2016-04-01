@@ -33,6 +33,7 @@ func makeSplitterRunner() (pipeline.SplitterRunner, error) {
 }
 
 func main() {
+	flag.Parse()
 	bridge, err := newBridge(*configFile)
 	if err != nil {
 		log.Fatalf("Couldn't read config %s: %s", *configFile, err)
@@ -46,10 +47,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Println("Listening for udp heka messages on", *listenHeka)
 	sr, err := makeSplitterRunner()
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Println("Listening for prometheus scrapes on", *listenHTTP+"/metrics")
 	go func() { log.Fatal(http.ListenAndServe(*listenHTTP, nil)) }()
 	msg := new(message.Message)
 	for {
