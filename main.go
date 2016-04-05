@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	listenHeka = flag.String("l", "0.0.0.0:50569", "Address to listen for heka protobuf messages on")
-	listenHTTP = flag.String("h", "0.0.0.0:8050", "Address to expose prometheus metrics on")
+	listenHeka = flag.String("l", ":50569", "Address to listen for heka protobuf messages on")
+	listenHTTP = flag.String("h", ":9137", "Address to expose prometheus metrics on")
 	configFile = flag.String("c", "metrics.json", "Path to metrics config")
 )
 
