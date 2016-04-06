@@ -59,6 +59,7 @@ func main() {
 		n, record, err := sr.GetRecordFromStream(listener)
 		if n > 0 && n != len(record) {
 			fmt.Fprintf(os.Stderr, "Corruption detected at bytes: %d\n", n-len(record))
+			continue
 		}
 		if err != nil {
 			log.Fatal(err)
