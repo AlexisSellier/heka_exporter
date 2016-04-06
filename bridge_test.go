@@ -73,4 +73,13 @@ func TestNewBridge(t *testing.T) {
 	if expect, got := 5, len(bridge.metrics); expect != got {
 		t.Fatalf("Expect: %s, Got: %s", expect, got)
 	}
+	if bridge.metrics[2].gaugeVec == nil {
+		t.Fatal("Expected 3rd metric to be gaugeVec")
+	}
+	if expect, got := "Logger = 'x'", bridge.metrics[2].MetricConfig.Matcher; expect != got {
+		t.Fatalf("Expect: %s, Got: %s", expect, got)
+	}
+	if bridge.metrics[2].matcher == nil {
+		t.Fatal("Expected matcher to be setup")
+	}
 }

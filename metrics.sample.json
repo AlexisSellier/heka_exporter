@@ -31,10 +31,11 @@
       }
     },
     {
-      "name": "nginx_request_time_last",
+      "name": "nginx_request_time_last_logger_x",
       "help": "Timestamp of last message",
       "type": "gauge",
       "value": "time",
+      "matcher": "Logger == 'x'",
       "labels": {
         "server": "@hostname",
         "service": "@logger"
