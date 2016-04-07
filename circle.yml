@@ -1,0 +1,14 @@
+dependencies:
+  pre:
+    - "go get -d github.com/mozilla-services/heka/message"
+    - "go tool yacc -l=false -o=message_matcher_parser.go message_matcher_parser.y":
+        pwd:
+          ../.go_workspace/src/github.com/mozilla-services/heka/message
+
+deployment:
+  release:
+    tag: /v[0-9]+(\.[0-9]+)*/
+    commands:
+      - go build
+      - tar czf heka_exporter-$VERSION.linux-amd64.tar.gz heka_exporter
+      - ./gh-upload-release $CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME $CIRCLE_TAG heka_exporter-$VERSION.linux-amd64.tar.gz

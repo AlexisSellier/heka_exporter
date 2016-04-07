@@ -1,0 +1,22 @@
+#!/bin/bash
+set -euo pipefail
+REPO=$1
+TAG=$2
+FILE=$3
+
+if [ -z "${GH_TOKEN:-}" ]; then
+  echo "Set GH_TOKEN env var" >&2
+  exit 1
+fi
+
+RELEASE=$(curl -s -L "https://api.github.com/repos/prometheus/prometheus/releases/tags/$TAG")
+UPLOAD_URL=$(echo "$RELEASE" | jq -r '.upload_url' | sed 's/{?name}//')
+
+status=$(curl -s -o /dev/null -H 'Content-type: application/gzip' \
+  -u "$GH_TOKEN:x-oauth-basic" "$UPLOAD_URL?name=$FILE" \
+  --data-binary "@$FILE" -w '%{http_code}')
+
+if [[ "$status" != "201" ]]; then
+  echo "Status $status when uploading release" >&2
+  exit 1
+fi
