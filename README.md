@@ -1,8 +1,8 @@
 # heka_exporter
 The heka_exporter reads a [config file](metrics.sample.json) which describes a
-set of [Prometheus](http://prometheus.io) metrics. It listens for heka
-messages, extracts the specified fields and exposes the metrics for consumption
-by Prometheus.
+set of [Prometheus](http://prometheus.io) metrics. It listens for
+[heka](http://hekad.readthedocs.org/) messages, extracts the specified fields
+and exposes the metrics for consumption by Prometheus.
 
 ## Configuration
 The heka_exporter is configured by providing a json file with a list of metric
