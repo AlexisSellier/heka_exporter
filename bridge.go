@@ -17,14 +17,15 @@ type Config struct {
 }
 
 type MetricConfig struct {
-	Name        string            `json:"name"`
-	Help        string            `json:"help"`
-	Type        string            `json:"type"`
-	Value       string            `json:"value"`
-	Matcher     string            `json:"matcher"`
-	Labels      map[string]string `json:"labels"`
-	ConstLabels map[string]string `json:"const_labels"`
-	Buckets     []float64         `json:buckets`
+	Name            string            `json:"name"`
+	Help            string            `json:"help"`
+	Type            string            `json:"type"`
+	Value           string            `json:"value"`
+	Matcher         string            `json:"matcher"`
+	Labels          map[string]string `json:"labels"`
+	ConstLabels     map[string]string `json:"const_labels"`
+	Buckets         []float64         `json:"buckets"`
+	ZeroNonMatching bool              `json:"zero_nonmatching"`
 }
 
 func (m *MetricConfig) LabelKeysValues() ([]string, []string) {
@@ -54,56 +55,74 @@ type metric struct {
 }
 
 func (m *metric) Process(msg *message.Message) {
-	if m.matcher != nil && !m.matcher.Match(msg) {
+	field := m.MetricConfig.Value
+	labels := extractLabels(m.LabelFields, msg)
+
+	// If we don't need to initialize non-matching metrics, we can return early
+	if !m.MetricConfig.ZeroNonMatching && m.matcher != nil && !m.matcher.Match(msg) {
 		return
 	}
-	value := 0.0
-	if m.MetricConfig.Value != "" {
-		v := getFieldValue(m.MetricConfig.Value, msg)
-		if v == nil {
-			log.Println("Couldn't find field", m.MetricConfig.Value)
-			return
-		}
-		switch v := v.(type) {
-		case float64:
-			value = v
-		case int:
-			value = float64(v)
-		default:
-			log.Printf("Invalid type %T for field %s", v, m.MetricConfig.Value)
-			return
-		}
-	}
-
 	switch m.MetricConfig.Type {
 	case "counter":
 		if len(m.LabelFields) > 0 {
-			if m.MetricConfig.Value == "" {
-				m.counterVec.WithLabelValues(extractLabels(m.LabelFields, msg)...).Inc()
-			} else {
-				m.counterVec.WithLabelValues(extractLabels(m.LabelFields, msg)...).Set(value)
+			m.counterVec.GetMetricWithLabelValues(labels...)
+			if m.matcher != nil && !m.matcher.Match(msg) {
+				break
 			}
+
+			if m.MetricConfig.Value == "" {
+				m.counterVec.WithLabelValues(labels...).Inc()
+			} else {
+				value, err := getFieldFloatValue(field, msg)
+				if err != nil {
+					log.Println(err)
+				}
+
+				m.counterVec.WithLabelValues(labels...).Set(value)
+			}
+
 		} else {
 			m.counter.Inc()
 		}
 	case "gauge":
+		metric := m.gauge
 		if len(m.LabelFields) > 0 {
-			m.gaugeVec.WithLabelValues(extractLabels(m.LabelFields, msg)...).Set(value)
-		} else {
-			m.gauge.Set(value)
+			metric = m.gaugeVec.WithLabelValues(labels...)
 		}
+		if m.matcher != nil && !m.matcher.Match(msg) {
+			break
+		}
+		value, err := getFieldFloatValue(field, msg)
+		if err != nil {
+			log.Println(err)
+		}
+		metric.Set(value)
 	case "histogram":
+		metric := m.histogram
 		if len(m.LabelFields) > 0 {
-			m.histogramVec.WithLabelValues(extractLabels(m.LabelFields, msg)...).Observe(value)
-		} else {
-			m.histogram.Observe(value)
+			metric = m.histogramVec.WithLabelValues(labels...)
 		}
+		if m.matcher != nil && !m.matcher.Match(msg) {
+			break
+		}
+		value, err := getFieldFloatValue(field, msg)
+		if err != nil {
+			log.Println(err)
+		}
+		metric.Observe(value)
 	case "summary":
+		metric := m.summary
 		if len(m.LabelFields) > 0 {
-			m.summaryVec.WithLabelValues(extractLabels(m.LabelFields, msg)...).Observe(value)
-		} else {
-			m.summary.Observe(value)
+			metric = m.summaryVec.WithLabelValues(labels...)
 		}
+		if m.matcher != nil && !m.matcher.Match(msg) {
+			break
+		}
+		value, err := getFieldFloatValue(field, msg)
+		if err != nil {
+			log.Println(err)
+		}
+		metric.Observe(value)
 	default:
 	}
 }
@@ -123,6 +142,21 @@ func getFieldValue(field string, msg *message.Message) (value interface{}) {
 	}
 	f, _ := msg.GetFieldValue(field)
 	return f
+}
+
+func getFieldFloatValue(field string, msg *message.Message) (float64, error) {
+	v := getFieldValue(field, msg)
+	if v == nil {
+		return 0.0, fmt.Errorf("Couldn't find field", field)
+	}
+	switch v := v.(type) {
+	case float64:
+		return v, nil
+	case int:
+		return float64(v), nil
+	default:
+		return 0.0, fmt.Errorf("Invalid type %T for field %s", v, field)
+	}
 }
 
 func extractLabels(labels []string, msg *message.Message) []string {

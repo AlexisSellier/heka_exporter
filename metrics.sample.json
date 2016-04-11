@@ -54,12 +54,12 @@
       "name": "example_counter_with_value",
       "help": "Timestamp of last message",
       "type": "counter",
+      "zero_nonmatching": true,
       "value": "time",
       "labels": {
         "server": "@hostname",
         "service": "@logger"
       }
     }
-
   ]
 }
