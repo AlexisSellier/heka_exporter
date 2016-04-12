@@ -1,0 +1,17 @@
+dependencies:
+  pre:
+    - "go get -d github.com/mozilla-services/heka/message"
+    - "go tool yacc -l=false -o=message_matcher_parser.go message_matcher_parser.y":
+        pwd:
+          ../.go_workspace/src/github.com/mozilla-services/heka/message
+
+deployment:
+  release:
+    tag: /v[0-9]+(\.[0-9]+)*/
+    commands:
+      - mkdir bin
+      - go build -o bin/heka_exporter
+      - tar czf $CIRCLE_ARTIFACTS/heka_exporter-$CIRCLE_TAG.linux-amd64.tar.gz bin/heka_exporter
+      - gem install fpm
+      - fpm -v $( echo $CIRCLE_TAG | tr -d v ) --url $CIRCLE_REPOSITORY_URL -p $CIRCLE_ARTIFACTS/
+        --provides heka-exporter -n prometheus-heka-exporter -t deb -s dir bin/=/opt/bin
