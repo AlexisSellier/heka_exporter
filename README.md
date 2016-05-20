@@ -1,4 +1,6 @@
 # heka_exporter
+[![CircleCI](https://circleci.com/gh/imgix/heka_exporter.svg?style=svg)](https://circleci.com/gh/imgix/heka_exporter)
+
 The heka_exporter reads a [config file](metrics.sample.json) which describes a
 set of [Prometheus](http://prometheus.io) metrics. It listens for
 [heka](http://hekad.readthedocs.org/) messages, extracts the specified fields
