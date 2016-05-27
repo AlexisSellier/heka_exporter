@@ -17,15 +17,15 @@ type Config struct {
 }
 
 type MetricConfig struct {
-	Name            string            `json:"name"`
-	Help            string            `json:"help"`
-	Type            string            `json:"type"`
-	Value           string            `json:"value"`
-	Matcher         string            `json:"matcher"`
-	Labels          map[string]string `json:"labels"`
-	ConstLabels     map[string]string `json:"const_labels"`
-	Buckets         []float64         `json:"buckets"`
-	ZeroNonMatching bool              `json:"zero_nonmatching"`
+	Name        string            `json:"name"`
+	Help        string            `json:"help"`
+	Type        string            `json:"type"`
+	Value       string            `json:"value"`
+	Matcher     string            `json:"matcher"`
+	Labels      map[string]string `json:"labels"`
+	ConstLabels map[string]string `json:"const_labels"`
+	Buckets     []float64         `json:"buckets"`
+	MatcherZero string            `json:"matcher_zero"`
 }
 
 func (m *MetricConfig) LabelKeysValues() ([]string, []string) {
@@ -50,6 +50,7 @@ type metric struct {
 	summary      prometheus.Summary
 	summaryVec   *prometheus.SummaryVec
 	matcher      *message.MatcherSpecification
+	matcherZero  *message.MatcherSpecification
 	LabelFields  []string
 	MetricConfig
 }
@@ -59,7 +60,11 @@ func (m *metric) Process(msg *message.Message) {
 	labels := extractLabels(m.LabelFields, msg)
 
 	// If we don't need to initialize non-matching metrics, we can return early
-	if !m.MetricConfig.ZeroNonMatching && m.matcher != nil && !m.matcher.Match(msg) {
+	if m.matcherZero == nil && m.matcher != nil && !m.matcher.Match(msg) {
+		return
+	}
+	// If we need to initialize non-match metrics, do only if matcher matches
+	if m.matcherZero != nil && !m.matcherZero.Match(msg) {
 		return
 	}
 	switch m.MetricConfig.Type {
@@ -147,7 +152,7 @@ func getFieldValue(field string, msg *message.Message) (value interface{}) {
 func getFieldFloatValue(field string, msg *message.Message) (float64, error) {
 	v := getFieldValue(field, msg)
 	if v == nil {
-		return 0.0, fmt.Errorf("Couldn't find field", field)
+		return 0.0, fmt.Errorf("Couldn't find field %s", field)
 	}
 	switch v := v.(type) {
 	case float64:
@@ -240,13 +245,17 @@ func newBridge(filename string) (*Bridge, error) {
 				return nil, fmt.Errorf("Metric type %s is invalid", metric.Type)
 			}
 		}
-
-		if metric.Matcher != "" {
-			matcher, err := message.CreateMatcherSpecification(metric.Matcher)
-			if err != nil {
-				return nil, err
+		for matcher, definition := range map[**message.MatcherSpecification]string{
+			&bridge.metrics[i].matcher:     metric.Matcher,
+			&bridge.metrics[i].matcherZero: metric.MatcherZero,
+		} {
+			if definition != "" {
+				ms, err := message.CreateMatcherSpecification(definition)
+				if err != nil {
+					return nil, err
+				}
+				*matcher = ms
 			}
-			bridge.metrics[i].matcher = matcher
 		}
 	}
 	http.Handle("/metrics", prometheus.Handler())

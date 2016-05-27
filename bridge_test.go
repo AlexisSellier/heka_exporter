@@ -47,14 +47,12 @@ func TestGetFieldValue(t *testing.T) {
 	}
 }
 
-var fieldToFloatTests = map[*message.Field]float64{
-	newField("", 23.5): 23.5,
-	newField("", 5):    5.0,
-	newField("", true): 1.0,
-}
-
 func TestFieldToFloat(t *testing.T) {
-	for field, expect := range fieldToFloatTests {
+	for field, expect := range map[*message.Field]float64{
+		newField("", 23.5): 23.5,
+		newField("", 5):    5.0,
+		newField("", true): 1.0,
+	} {
 		got, err := fieldToFloat(field)
 		if err != nil {
 			t.Fatal("Expected %s but got error: %s", expect, err)
@@ -82,4 +80,10 @@ func TestNewBridge(t *testing.T) {
 	if bridge.metrics[2].matcher == nil {
 		t.Fatal("Expected matcher to be setup")
 	}
+
+	msg := newTestMessage()
+	if err := bridge.Process(msg); err != nil {
+		t.Fatal(err)
+	}
+	//FIXME: Compare to expected metric set once support in prometheus client lib is better
 }

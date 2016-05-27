@@ -27,6 +27,7 @@ Each metric definition consists of:
 - labels: Dynamatic labels where value refers to Heka variables
 - matcher: (Optional, all matched by default) Only messages matching this Heka
   matcher will be considered
+- matcher_zero (Optional) Create a metric with value 0 for matching message
 - value: (Optional for counters) The Heka variables to take the metric value from
 - buckets: (Required for histograms) Buckets into which observations are
   counted
@@ -45,6 +46,11 @@ variables, the following @-prefixed keywords can be used:
 - @pid
 - @severity
 - @timestamp
+
+The `macher_zero` matcher definition can be used to initialize metrics. If a
+message matches this, a metric gets created even if `matcher` doesn't match. The
+value defauts to 0. This is only needed for special cases where it's required
+that a metric get first set to 0.
 
 ## Building it
 The exporter depends on the heka go libraries. You need to *build* them first
