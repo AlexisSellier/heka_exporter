@@ -22,6 +22,8 @@ func newTestMessage() *message.Message {
 		"status": 500,
 		"float":  1.6,
 		"up":     true,
+		"upstream_response_time_total": 2.345,
+		"time": 1465201401.123,
 	} {
 		msg.AddField(newField(k, v))
 	}
@@ -63,8 +65,11 @@ func TestFieldToFloat(t *testing.T) {
 	}
 }
 
+var bridge *Bridge
+
 func TestNewBridge(t *testing.T) {
-	bridge, err := newBridge("metrics.sample.json")
+	var err error
+	bridge, err = newBridge("metrics.sample.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,4 +91,13 @@ func TestNewBridge(t *testing.T) {
 		t.Fatal(err)
 	}
 	//FIXME: Compare to expected metric set once support in prometheus client lib is better
+}
+
+func BenchmarkBridge(b *testing.B) {
+	msg := newTestMessage()
+	for i := 0; i < b.N; i++ {
+		if err := bridge.Process(msg); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
