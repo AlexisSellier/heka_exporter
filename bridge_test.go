@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/mozilla-services/heka/message"
@@ -69,7 +70,7 @@ var bridge *Bridge
 
 func TestNewBridge(t *testing.T) {
 	var err error
-	bridge, err = newBridge("metrics.sample.json")
+	bridge, err = newBridge(http.NewServeMux(), "metrics.sample.json")
 	if err != nil {
 		t.Fatal(err)
 	}

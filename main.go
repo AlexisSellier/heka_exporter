@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"os"
 
 	"github.com/gogo/protobuf/proto"
@@ -14,9 +15,10 @@ import (
 )
 
 var (
-	listenHeka = flag.String("l", ":50569", "Address to listen for heka protobuf messages on")
-	listenHTTP = flag.String("h", ":9137", "Address to expose prometheus metrics on")
-	configFile = flag.String("c", "metrics.json", "Path to metrics config")
+	listenHeka  = flag.String("l", ":50569", "Address to listen for heka protobuf messages on")
+	listenHTTP  = flag.String("h", ":9137", "Address to expose prometheus metrics on")
+	configFile  = flag.String("c", "metrics.json", "Path to metrics config")
+	enablePprof = flag.Bool("pprof", false, "Enable pprof endpoint on /debug/pprof")
 )
 
 // from https://github.com/mozilla-services/heka/blob/dev/cmd/heka-cat/main.go
@@ -34,7 +36,20 @@ func makeSplitterRunner() (pipeline.SplitterRunner, error) {
 
 func main() {
 	flag.Parse()
-	bridge, err := newBridge(*configFile)
+	mux := http.NewServeMux()
+	if *enablePprof {
+		for p, f := range map[string]http.HandlerFunc{
+			"/debug/pprof/":        pprof.Index,
+			"/debug/pprof/cmdline": pprof.Cmdline,
+			"/debug/pprof/profile": pprof.Profile,
+			"/debug/pprof/symbol":  pprof.Symbol,
+			"/debug/pprof/trace":   pprof.Trace,
+		} {
+
+			mux.HandleFunc(p, f)
+		}
+	}
+	bridge, err := newBridge(mux, *configFile)
 	if err != nil {
 		log.Fatalf("Couldn't read config %s: %s", *configFile, err)
 	}
@@ -53,7 +68,7 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Println("Listening for prometheus scrapes on", *listenHTTP+"/metrics")
-	go func() { log.Fatal(http.ListenAndServe(*listenHTTP, nil)) }()
+	go func() { log.Fatal(http.ListenAndServe(*listenHTTP, mux)) }()
 	msg := new(message.Message)
 	for {
 		n, record, err := sr.GetRecordFromStream(listener)

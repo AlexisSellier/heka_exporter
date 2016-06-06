@@ -192,7 +192,7 @@ type Bridge struct {
 	metrics []metric
 }
 
-func newBridge(filename string) (*Bridge, error) {
+func newBridge(mux *http.ServeMux, filename string) (*Bridge, error) {
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return nil, err
@@ -258,7 +258,7 @@ func newBridge(filename string) (*Bridge, error) {
 			}
 		}
 	}
-	http.Handle("/metrics", prometheus.Handler())
+	mux.Handle("/metrics", prometheus.Handler())
 	return bridge, nil
 }
 
