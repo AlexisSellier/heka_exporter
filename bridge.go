@@ -196,11 +196,11 @@ func fieldToFloat(field *message.Field) (float64, error) {
 
 type Bridge struct {
 	metrics []metric
-	sr      pipeline.SplitterRunner
 
-	messageCount prometheus.Counter
-	duration     prometheus.Summary
-	errors       *prometheus.CounterVec
+	messageCount      prometheus.Counter
+	messageEmptyCount prometheus.Counter
+	duration          prometheus.Summary
+	errors            *prometheus.CounterVec
 }
 
 func newBridge(mux *http.ServeMux, filename string) (*Bridge, error) {
@@ -212,15 +212,14 @@ func newBridge(mux *http.ServeMux, filename string) (*Bridge, error) {
 	if err := json.Unmarshal(data, config); err != nil {
 		return nil, err
 	}
-	sr, err := makeSplitterRunner()
-	if err != nil {
-		return nil, err
-	}
 	bridge := &Bridge{
-		sr: sr,
 		messageCount: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "heka_exporter_messages_total",
 			Help: "Total number of messages processed",
+		}),
+		messageEmptyCount: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "heka_exporter_messages_empty_total",
+			Help: "Total number of empty messages processed",
 		}),
 		errors: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "heka_exporter_errors_total",
@@ -232,6 +231,7 @@ func newBridge(mux *http.ServeMux, filename string) (*Bridge, error) {
 		}),
 	}
 	prometheus.MustRegister(bridge.messageCount)
+	prometheus.MustRegister(bridge.messageEmptyCount)
 	prometheus.MustRegister(bridge.errors)
 	prometheus.MustRegister(bridge.duration)
 
@@ -297,15 +297,22 @@ func newBridge(mux *http.ServeMux, filename string) (*Bridge, error) {
 
 func (b *Bridge) Process(listener io.ReadCloser) {
 	defer listener.Close()
+	sr, err := makeSplitterRunner()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	msg := new(message.Message)
 	for {
 		start := time.Now()
 		b.messageCount.Inc()
-		n, record, err := b.sr.GetRecordFromStream(listener)
+		n, record, err := sr.GetRecordFromStream(listener)
 		if n > 0 && n != len(record) {
 			b.errors.WithLabelValues("get-record-len").Inc()
 			log.Println("Corruption detected at bytes:", n-len(record))
-			continue
+			if err == nil { // Otherwise fall through to err handler below
+				continue
+			}
 		}
 		if err != nil {
 			if err != io.EOF {
@@ -313,6 +320,10 @@ func (b *Bridge) Process(listener io.ReadCloser) {
 				b.errors.WithLabelValues("get-record").Inc()
 			}
 			return
+		}
+		if len(record) == 0 {
+			b.messageEmptyCount.Inc()
+			continue
 		}
 		headerLen := int(record[1]) + message.HEADER_FRAMING_SIZE
 		if err = proto.Unmarshal(record[headerLen:], msg); err != nil {
