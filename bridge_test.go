@@ -50,6 +50,12 @@ func TestGetFieldValue(t *testing.T) {
 	}
 }
 
+func BenchmarkGetFieldValue(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		newTestMessage()
+	}
+}
+
 func TestFieldToFloat(t *testing.T) {
 	for field, expect := range map[*message.Field]float64{
 		newField("", 23.5): 23.5,
@@ -88,17 +94,13 @@ func TestNewBridge(t *testing.T) {
 	}
 
 	msg := newTestMessage()
-	if err := bridge.Process(msg); err != nil {
-		t.Fatal(err)
-	}
+	bridge.processMessage(msg)
 	//FIXME: Compare to expected metric set once support in prometheus client lib is better
 }
 
 func BenchmarkBridge(b *testing.B) {
 	msg := newTestMessage()
 	for i := 0; i < b.N; i++ {
-		if err := bridge.Process(msg); err != nil {
-			b.Fatal(err)
-		}
+		bridge.processMessage(msg)
 	}
 }

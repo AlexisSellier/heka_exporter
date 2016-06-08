@@ -3,12 +3,15 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"strconv"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/mozilla-services/heka/message"
+	"github.com/mozilla-services/heka/pipeline"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -190,6 +193,7 @@ func fieldToFloat(field *message.Field) (float64, error) {
 
 type Bridge struct {
 	metrics []metric
+	sr      pipeline.SplitterRunner
 }
 
 func newBridge(mux *http.ServeMux, filename string) (*Bridge, error) {
@@ -201,7 +205,11 @@ func newBridge(mux *http.ServeMux, filename string) (*Bridge, error) {
 	if err := json.Unmarshal(data, config); err != nil {
 		return nil, err
 	}
-	bridge := &Bridge{}
+	sr, err := makeSplitterRunner()
+	if err != nil {
+		return nil, err
+	}
+	bridge := &Bridge{sr: sr}
 	bridge.metrics = make([]metric, len(config.Metrics))
 	for i, metric := range config.Metrics {
 		if metric.Value == "" && metric.Type != "counter" {
@@ -262,9 +270,43 @@ func newBridge(mux *http.ServeMux, filename string) (*Bridge, error) {
 	return bridge, nil
 }
 
-func (b *Bridge) Process(msg *message.Message) error {
+func (b *Bridge) Process(listener io.ReadCloser) {
+	defer listener.Close()
+	msg := new(message.Message)
+	for {
+		n, record, err := b.sr.GetRecordFromStream(listener)
+		if n > 0 && n != len(record) {
+			log.Println("Corruption detected at bytes:", n-len(record))
+			continue
+		}
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		headerLen := int(record[1]) + message.HEADER_FRAMING_SIZE
+		if err = proto.Unmarshal(record[headerLen:], msg); err != nil {
+			log.Println(err)
+			continue
+		}
+		b.processMessage(msg)
+	}
+}
+
+func (b *Bridge) processMessage(msg *message.Message) {
 	for _, metric := range b.metrics {
 		metric.Process(msg)
 	}
-	return nil
+}
+
+// from https://github.com/mozilla-services/heka/blob/dev/cmd/heka-cat/main.go
+func makeSplitterRunner() (pipeline.SplitterRunner, error) {
+	splitter := &pipeline.HekaFramingSplitter{}
+	config := splitter.ConfigStruct()
+	err := splitter.Init(config)
+	if err != nil {
+		return nil, fmt.Errorf("Error initializing HekaFramingSplitter: %s", err)
+	}
+	srConfig := pipeline.CommonSplitterConfig{}
+	sRunner := pipeline.NewSplitterRunner("HekaFramingSplitter", splitter, srConfig)
+	return sRunner, nil
 }
