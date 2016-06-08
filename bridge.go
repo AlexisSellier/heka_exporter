@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/mozilla-services/heka/message"
@@ -58,17 +59,17 @@ type metric struct {
 	MetricConfig
 }
 
-func (m *metric) Process(msg *message.Message) {
+func (m *metric) Process(msg *message.Message) error {
 	field := m.MetricConfig.Value
 	labels := extractLabels(m.LabelFields, msg)
 
 	// If we don't need to initialize non-matching metrics, we can return early
 	if m.matcherZero == nil && m.matcher != nil && !m.matcher.Match(msg) {
-		return
+		return nil
 	}
 	// If we need to initialize non-match metrics, do only if matcher matches
 	if m.matcherZero != nil && !m.matcherZero.Match(msg) {
-		return
+		return nil
 	}
 	switch m.MetricConfig.Type {
 	case "counter":
@@ -83,7 +84,7 @@ func (m *metric) Process(msg *message.Message) {
 			} else {
 				value, err := getFieldFloatValue(field, msg)
 				if err != nil {
-					log.Println(err)
+					return err
 				}
 
 				m.counterVec.WithLabelValues(labels...).Set(value)
@@ -102,7 +103,7 @@ func (m *metric) Process(msg *message.Message) {
 		}
 		value, err := getFieldFloatValue(field, msg)
 		if err != nil {
-			log.Println(err)
+			return err
 		}
 		metric.Set(value)
 	case "histogram":
@@ -115,7 +116,7 @@ func (m *metric) Process(msg *message.Message) {
 		}
 		value, err := getFieldFloatValue(field, msg)
 		if err != nil {
-			log.Println(err)
+			return err
 		}
 		metric.Observe(value)
 	case "summary":
@@ -128,11 +129,13 @@ func (m *metric) Process(msg *message.Message) {
 		}
 		value, err := getFieldFloatValue(field, msg)
 		if err != nil {
-			log.Println(err)
+			return err
 		}
 		metric.Observe(value)
 	default:
+		return fmt.Errorf("Invalid metric type %s", m.MetricConfig.Type)
 	}
+	return nil
 }
 
 func getFieldValue(field string, msg *message.Message) (value interface{}) {
@@ -194,6 +197,10 @@ func fieldToFloat(field *message.Field) (float64, error) {
 type Bridge struct {
 	metrics []metric
 	sr      pipeline.SplitterRunner
+
+	messageCount prometheus.Counter
+	duration     prometheus.Summary
+	errors       *prometheus.CounterVec
 }
 
 func newBridge(mux *http.ServeMux, filename string) (*Bridge, error) {
@@ -209,7 +216,25 @@ func newBridge(mux *http.ServeMux, filename string) (*Bridge, error) {
 	if err != nil {
 		return nil, err
 	}
-	bridge := &Bridge{sr: sr}
+	bridge := &Bridge{
+		sr: sr,
+		messageCount: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "heka_exporter_messages_total",
+			Help: "Total number of messages processed",
+		}),
+		errors: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "heka_exporter_errors_total",
+			Help: "Total number of errrors while processing message",
+		}, []string{"stage"}),
+		duration: prometheus.NewSummary(prometheus.SummaryOpts{
+			Name: "heka_exporter_message_duration_seconds",
+			Help: "Duration of processing a message in seconds",
+		}),
+	}
+	prometheus.MustRegister(bridge.messageCount)
+	prometheus.MustRegister(bridge.errors)
+	prometheus.MustRegister(bridge.duration)
+
 	bridge.metrics = make([]metric, len(config.Metrics))
 	for i, metric := range config.Metrics {
 		if metric.Value == "" && metric.Type != "counter" {
@@ -274,28 +299,44 @@ func (b *Bridge) Process(listener io.ReadCloser) {
 	defer listener.Close()
 	msg := new(message.Message)
 	for {
+		start := time.Now()
+		b.messageCount.Inc()
 		n, record, err := b.sr.GetRecordFromStream(listener)
 		if n > 0 && n != len(record) {
+			b.errors.WithLabelValues("get-record-len").Inc()
 			log.Println("Corruption detected at bytes:", n-len(record))
 			continue
 		}
 		if err != nil {
-			log.Println(err)
+			if err != io.EOF {
+				log.Println(err)
+				b.errors.WithLabelValues("get-record").Inc()
+			}
 			return
 		}
 		headerLen := int(record[1]) + message.HEADER_FRAMING_SIZE
 		if err = proto.Unmarshal(record[headerLen:], msg); err != nil {
 			log.Println(err)
+			b.errors.WithLabelValues("unmarshal").Inc()
 			continue
 		}
-		b.processMessage(msg)
+		if err := b.processMessage(msg); err != nil {
+			b.errors.WithLabelValues("process").Inc()
+			continue
+		}
+		b.duration.Observe(time.Since(start).Seconds())
 	}
 }
 
-func (b *Bridge) processMessage(msg *message.Message) {
+func (b *Bridge) processMessage(msg *message.Message) error {
+	var err error
 	for _, metric := range b.metrics {
-		metric.Process(msg)
+		err = metric.Process(msg)
+		if err != nil {
+			log.Printf("Error processing %v: %s", metric, err)
+		}
 	}
+	return err
 }
 
 // from https://github.com/mozilla-services/heka/blob/dev/cmd/heka-cat/main.go

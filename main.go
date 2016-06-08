@@ -55,15 +55,17 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		for {
-			conn, err := listener.Accept()
-			if err != nil {
-				log.Println(err)
+		go func() {
+			for {
+				conn, err := listener.Accept()
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+				log.Println("New connection from", conn.RemoteAddr())
+				go bridge.Process(conn)
 			}
-			log.Println("New connection from", conn.RemoteAddr())
-			go bridge.Process(conn)
-		}
+		}()
 	}
 	log.Println("Listening for prometheus scrapes on", *listenHTTP+"/metrics")
 	log.Fatal(http.ListenAndServe(*listenHTTP, mux))
