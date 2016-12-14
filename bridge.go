@@ -87,7 +87,7 @@ func (m *metric) Process(msg *message.Message) error {
 					return err
 				}
 
-				m.counterVec.WithLabelValues(labels...).Set(value)
+				m.counterVec.WithLabelValues(labels...).Add(value)
 			}
 
 		} else {
